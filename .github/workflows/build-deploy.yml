@@ -1,18 +1,30 @@
 name: Build & Deploy to Lab (Docker)
 
 on:
-  workflow_dispatch:        # run manually first
+  workflow_dispatch:    # run manually first
   # push:
-  #   branches: [ main ]    # uncomment later to auto-run on push
+  #   branches: [ main ] # uncomment later to auto-run on push
 
 jobs:
   build-deploy:
-    runs-on: self-hosted    # uses your Ubuntu runner
+    runs-on: self-hosted           # uses your Ubuntu runner
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Debug – show repo files
+        run: |
+          pwd
+          echo "Branch: $GITHUB_REF"
+          ls -la
+          echo "--------------------------------"
+          ls -la TailwindTraders.Website || true
+          echo "--------------------------------"
+          # show any Dockerfile we can see in first 3 levels
+          find . -maxdepth 3 \( -iname 'Dockerfile' -o -iname 'dockerfile' \) -printf '%P\n' || true
 
       - name: Build Docker image
-        run: docker build -t twt-web:latest ./TailwindTraders.Website
+        run: docker build -t twt-web:latest -f TailwindTraders.Website/Dockerfile .
 
       - name: Replace running container
         run: |
