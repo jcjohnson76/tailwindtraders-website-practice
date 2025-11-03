@@ -1,33 +1,48 @@
 name: Build & Deploy to Lab (Docker)
 
 on:
-  workflow_dispatch:    # run manually first
-  # push:
-  #   branches: [ main ] # uncomment later to auto-run on push
+  workflow_dispatch: {}   # run manually for now
 
 jobs:
   build-deploy:
-    runs-on: self-hosted           # uses your Ubuntu runner
+    runs-on: self-hosted   # your Ubuntu runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Debug – show repo files
+      - name: Debug – list Dockerfiles
         run: |
           pwd
-          echo "Branch: $GITHUB_REF"
-          ls -la
-          echo "--------------------------------"
-          ls -la TailwindTraders.Website || true
-          echo "--------------------------------"
-          # show any Dockerfile we can see in first 3 levels
-          find . -maxdepth 3 \( -iname 'Dockerfile' -o -iname 'dockerfile' \) -printf '%P\n' || true
+          find . -maxdepth 6 -type f -iname 'dockerfile' -printf '%p\n' | nl
+
+      - name: Find first Dockerfile (and its context)
+        id: pick
+        shell: bash
+        run: |
+          set -euo pipefail
+          DF=$(find . -maxdepth 6 -type f -iname 'dockerfile' | head -n1 || true)
+          if [ -z "$DF" ]; then
+            echo "::error::No Dockerfile found under repo root"; exit 1
+          fi
+          CTX=$(dirname "$DF")
+          echo "df=$DF"   >> "$GITHUB_OUTPUT"
+          echo "ctx=$CTX" >> "$GITHUB_OUTPUT"
+          echo "Picked Dockerfile: $DF"
+          echo "Context:           $CTX"
 
       - name: Build Docker image
-        run: docker build -t twt-web:latest -f TailwindTraders.Website/Dockerfile .
+        run: |
+          docker build -t twt-web:latest \
+            -f "${{ steps.pick.outputs.df }}" \
+            "${{ steps.pick.outputs.ctx }}"
 
       - name: Replace running container
         run: |
           docker rm -f twt-web || true
           docker run -d --name twt-web -p 8080:80 twt-web:latest
           docker ps -a
+
+      - name: Quick health check
+        run: |
+          sleep 5
+          curl -I http://localhost:8080 || true
