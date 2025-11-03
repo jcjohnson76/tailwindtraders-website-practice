@@ -1,49 +1,30 @@
-# syntax=docker/dockerfile:1.6
+ARG sdkTag=5.0
+ARG runtimeTag=5.0
+ARG image=mcr.microsoft.com/dotnet/aspnet
+ARG sdkImage=mcr.microsoft.com/dotnet/sdk
 
-# ─────────────────────────────
-# Stage 1: Build the ClientApp
-# ─────────────────────────────
-FROM node:18-alpine AS build-node
+FROM node:10-alpine as build-node
 WORKDIR /ClientApp
-
-# Install build toolchain + deps for npm modules that need native builds
-COPY ClientApp/package*.json ./
-RUN apk add --no-cache python3 make g++ \
-  && npm ci
-
-# Build the front-end
+COPY ClientApp/package.json .
+COPY ClientApp/package-lock.json .
+RUN apk add --update python make g++\
+   && rm -rf /var/cache/apk/*
+RUN npm install
 COPY ClientApp/ .
 RUN npm run build
 
-# ─────────────────────────────
-# Stage 2: Build & publish .NET
-# ─────────────────────────────
-ARG SDK_TAG=8.0
-FROM mcr.microsoft.com/dotnet/sdk:${SDK_TAG} AS build-net
-ENV BuildingDocker=true
-
+FROM ${sdkImage}:${sdkTag} as build-net
+ENV BuildingDocker true
+ENV ASPNETCORE_ENVIRONMENT=Development
 WORKDIR /app
-# The Dockerfile is in the same folder as the .csproj
-COPY *.csproj ./
+COPY *.csproj .
 RUN dotnet restore
-
-# Copy the rest and publish
 COPY . .
-RUN dotnet publish -c Release -o /twtweb
+RUN dotnet build
+RUN dotnet publish -o /ttweb
 
-# ─────────────────────────────
-# Stage 3: Runtime image
-# ─────────────────────────────
-ARG RUNTIME_TAG=8.0
-FROM mcr.microsoft.com/dotnet/aspnet:${RUNTIME_TAG} AS runtime
-
-# Make Kestrel listen on port 80 so your run command (-p 8080:80) works
-ENV ASPNETCORE_URLS=http://+:80
+FROM ${image}:${runtimeTag} as runtime
 WORKDIR /web
-EXPOSE 80
-
-# App + static frontend assets
-COPY --from=build-net  /twtweb                 .
-COPY --from=build-node /ClientApp/build        ./ClientApp/build
-
-ENTRYPOINT ["dotnet", "Tailwind.Traders.Web.dll"]
+COPY --from=build-net /ttweb .
+COPY --from=build-node /ClientApp/build ./ClientApp/build
+ENTRYPOINT [ "dotnet","Tailwind.Traders.Web.dll" ]
