@@ -1,0 +1,21 @@
+name: Build & Deploy to Lab (Docker)
+
+on:
+  workflow_dispatch:        # run manually first
+  # push:
+  #   branches: [ main ]    # uncomment later to auto-run on push
+
+jobs:
+  build-deploy:
+    runs-on: self-hosted    # uses your Ubuntu runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t twt-web:latest ./TailwindTraders.Website
+
+      - name: Replace running container
+        run: |
+          docker rm -f twt-web || true
+          docker run -d --name twt-web -p 8080:80 twt-web:latest
+          docker ps -a
