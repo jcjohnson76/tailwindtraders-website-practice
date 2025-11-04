@@ -1,48 +1,38 @@
 name: Build & Deploy to Lab (Docker)
 
 on:
-  workflow_dispatch: {}   # run manually for now
+  workflow_dispatch:
 
 jobs:
   build-deploy:
-    runs-on: self-hosted   # your Ubuntu runner
+    runs-on: self-hosted
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Debug – list Dockerfiles
+      - name: Show repo for debugging
         run: |
-          pwd
-          find . -maxdepth 6 -type f -iname 'dockerfile' -printf '%p\n' | nl
+          echo "repo root: $(pwd)"
+          git rev-parse --show-toplevel
+          echo "---- list top-level ----"
+          ls -la
+          echo "---- list web project ----"
+          ls -la TailwindTraders.Website/Source/Tailwind.Traders.Web
+          echo "---- show pinned dockerfile path ----"
+          test -f TailwindTraders.Website/Source/Tailwind.Traders.Web/Dockerfile && echo "Dockerfile exists"
 
-      - name: Find first Dockerfile (and its context)
-        id: pick
-        shell: bash
+      - name: Build Docker image (PINNED file + context)
+        env:
+          DOCKERFILE: TailwindTraders.Website/Source/Tailwind.Traders.Web/Dockerfile
+          DOCKER_CONTEXT: TailwindTraders.Website/Source/Tailwind.Traders.Web
         run: |
-          set -euo pipefail
-          DF=$(find . -maxdepth 6 -type f -iname 'dockerfile' | head -n1 || true)
-          if [ -z "$DF" ]; then
-            echo "::error::No Dockerfile found under repo root"; exit 1
-          fi
-          CTX=$(dirname "$DF")
-          echo "df=$DF"   >> "$GITHUB_OUTPUT"
-          echo "ctx=$CTX" >> "$GITHUB_OUTPUT"
-          echo "Picked Dockerfile: $DF"
-          echo "Context:           $CTX"
-
-      - name: Build Docker image
-        run: |
-          docker build -t twt-web:latest \
-            -f "${{ steps.pick.outputs.df }}" \
-            "${{ steps.pick.outputs.ctx }}"
+          echo "Using DOCKERFILE=$DOCKERFILE"
+          echo "Using DOCKER_CONTEXT=$DOCKER_CONTEXT"
+          docker build -t twt-web:latest -f "$DOCKERFILE" "$DOCKER_CONTEXT"
 
       - name: Replace running container
         run: |
           docker rm -f twt-web || true
-          docker run -d --name twt-web -p 8080:80 twt-web:latest
+          docker run -d --name twt-web -p 8080:8080 twt-web:latest
           docker ps -a
-
-      - name: Quick health check
-        run: |
-          sleep 5
-          curl -I http://localhost:8080 || true
